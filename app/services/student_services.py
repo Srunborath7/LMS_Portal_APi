@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from fastapi import UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequest, Conflict, NotFound
+from app.core.upload import remove_image, save_image
 from app.domain.students.model import Student, StudentStatus
 from app.repositories.student_repositories import StudentRepository
 from app.domain.students.schema import StudentCreate, StudentFilter, StudentUpdate
@@ -96,6 +98,31 @@ class StudentService:
 
     async def set_status(self, student_id: UUID, new_status: StudentStatus) -> Student:
         return await self.update(student_id, StudentUpdate(status=new_status))
+
+    async def set_image(self, student_id: UUID, upload: UploadFile) -> Student:
+        student = await self.get(student_id)
+        new_url = await save_image(upload, "students")
+        old_url = student.image_url
+        try:
+            await self.repo.update(student, {"image_url": new_url})
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            await remove_image(new_url)
+            raise
+        if old_url and old_url != new_url:
+            await remove_image(old_url)
+        return student
+
+    async def delete_image(self, student_id: UUID) -> Student:
+        student = await self.get(student_id)
+        old_url = student.image_url
+        if old_url is None:
+            return student
+        await self.repo.update(student, {"image_url": None})
+        await self.session.commit()
+        await remove_image(old_url)
+        return student
 
     async def _ensure_unique(
         self,

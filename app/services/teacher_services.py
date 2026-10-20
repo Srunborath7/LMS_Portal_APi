@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from fastapi import UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequest, Conflict, NotFound
+from app.core.upload import remove_image, save_image
 from app.domain.auths.model import AuthRole
 from app.domain.teachers.model import Teacher, TeacherStatus
 from app.domain.teachers.schema import TeacherCreate, TeacherFilter, TeacherUpdate
@@ -79,6 +81,31 @@ class TeacherService:
 
     async def set_status(self, teacher_id: UUID, new_status: TeacherStatus) -> Teacher:
         return await self.update(teacher_id, TeacherUpdate(status=new_status))
+
+    async def set_image(self, teacher_id: UUID, upload: UploadFile) -> Teacher:
+        teacher = await self.get(teacher_id)
+        new_url = await save_image(upload, "teachers")
+        old_url = teacher.image_url
+        try:
+            await self.repo.update(teacher, {"image_url": new_url})
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            await remove_image(new_url)
+            raise
+        if old_url and old_url != new_url:
+            await remove_image(old_url)
+        return teacher
+
+    async def delete_image(self, teacher_id: UUID) -> Teacher:
+        teacher = await self.get(teacher_id)
+        old_url = teacher.image_url
+        if old_url is None:
+            return teacher
+        await self.repo.update(teacher, {"image_url": None})
+        await self.session.commit()
+        await remove_image(old_url)
+        return teacher
 
     async def delete(self, teacher_id: UUID) -> None:
         teacher = await self.get(teacher_id)

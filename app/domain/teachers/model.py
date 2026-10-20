@@ -48,7 +48,7 @@ class Teacher(AuditMixin, Base):
     date_of_birth: Mapped[date | None] = mapped_column(Date)
     gender: Mapped[Gender | None] = mapped_column(Enum(Gender, native_enum=False, length=20))
     nationality: Mapped[str | None] = mapped_column(String(50))
-    photo_url: Mapped[str | None] = mapped_column(String(500))
+    image_url: Mapped[str | None] = mapped_column(String(500))
 
     # Contact
     email: Mapped[str] = mapped_column(String(255), nullable=False)
