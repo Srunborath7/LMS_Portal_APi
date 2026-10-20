@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.core.base import Base
 from app.domain.auths import model as auth_models  # noqa: F401
 from app.domain.students import model as student_models  # noqa: F401
+from app.domain.teachers import model as teacher_models  # noqa: F401
 
 
 config = context.config

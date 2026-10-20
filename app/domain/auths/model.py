@@ -56,6 +56,7 @@ class Auth(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(back_populates="auth", cascade="all, delete-orphan", passive_deletes=True)
     student = relationship("Student", foreign_keys="Student.auth_id", back_populates="auth", uselist=False)
+    teacher = relationship("Teacher", foreign_keys="Teacher.auth_id", back_populates="auth", uselist=False)
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"

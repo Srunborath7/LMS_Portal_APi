@@ -54,3 +54,9 @@ async def require_staff(
     if auth.role not in {AuthRole.teacher, AuthRole.admin}:
         raise Forbidden("A teacher or administrator role is required")
     return auth.id
+
+
+async def require_admin(auth: CurrentAuth) -> UUID:
+    if auth.role != AuthRole.admin:
+        raise Forbidden("An administrator role is required")
+    return auth.id
