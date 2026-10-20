@@ -1,0 +1,17 @@
+.env
+.env.*
+.git
+.gitignore
+.venv
+venv
+ENV
+env
+__pycache__
+*.py[cod]
+.pytest_cache
+.coverage
+htmlcov
+.DS_Store
+.idea
+.vscode
+*.swp
