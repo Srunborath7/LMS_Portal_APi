@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user_id, require_admin
@@ -68,6 +68,20 @@ async def update_teacher(
     teacher_id: UUID, data: TeacherUpdate, svc: Service
 ) -> Teacher:
     return await svc.update(teacher_id, data)
+
+
+@router.put("/{teacher_id}/image", response_model=TeacherOut,
+            dependencies=[Depends(require_admin)])
+async def upload_teacher_image(
+    teacher_id: UUID, svc: Service, image: UploadFile = File(...)
+) -> Teacher:
+    return await svc.set_image(teacher_id, image)
+
+
+@router.delete("/{teacher_id}/image", response_model=TeacherOut,
+               dependencies=[Depends(require_admin)])
+async def delete_teacher_image(teacher_id: UUID, svc: Service) -> Teacher:
+    return await svc.delete_image(teacher_id)
 
 
 @router.patch("/{teacher_id}/status", response_model=TeacherOut,
