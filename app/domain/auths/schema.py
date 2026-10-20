@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.domain.auths.model import AuthRole
+
 
 class AuthCreate(BaseModel):
     username: str = Field(min_length=3, max_length=50)
@@ -29,6 +31,7 @@ class AuthRead(BaseModel):
     id: UUID
     username: str
     email: EmailStr
+    role: AuthRole
     is_active: bool
     is_verified: bool
     created_at: datetime
