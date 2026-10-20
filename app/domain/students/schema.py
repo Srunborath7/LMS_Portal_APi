@@ -125,6 +125,7 @@ class StudentOut(BaseModel):
     date_of_birth: date | None
     age: int | None         # model @property
     gender: Gender | None
+    image_url: str | None
 
     email: EmailStr
     phone: str | None
@@ -151,6 +152,7 @@ class StudentBrief(BaseModel):
     id: UUID
     student_code: str
     full_name: str
+    image_url: str | None = None
     status: StudentStatus
 
 

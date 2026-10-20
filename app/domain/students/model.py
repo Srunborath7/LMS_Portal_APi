@@ -59,6 +59,7 @@ class Student(AuditMixin, Base):
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     date_of_birth: Mapped[date | None] = mapped_column(Date)
     gender: Mapped[Gender | None] = mapped_column(Enum(Gender, native_enum=False, length=20))
+    image_url: Mapped[str | None] = mapped_column(String(500))
     # Contact
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     phone: Mapped[str | None] = mapped_column(String(20))  # E.164
