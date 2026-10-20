@@ -1,15 +1,38 @@
+import enum
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Uuid, func, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Uuid,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
 
 
+class AuthRole(str, enum.Enum):
+    student = "student"
+    teacher = "teacher"
+    admin = "admin"
+
+
 class Auth(Base):
     __tablename__ = "auths"
     __table_args__ = (
+        CheckConstraint(
+            "role IN ('student', 'teacher', 'admin')",
+            name="ck_auths_role",
+        ),
         Index("uq_auths_email_lower", text("lower(email)"), unique=True),
         Index("uq_auths_username_lower", text("lower(username)"), unique=True),
     )
@@ -18,6 +41,12 @@ class Auth(Base):
     username: Mapped[str] = mapped_column(String(50), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    role: Mapped[AuthRole] = mapped_column(
+        Enum(AuthRole, native_enum=False, length=20, create_constraint=False),
+        nullable=False,
+        default=AuthRole.student,
+        server_default=AuthRole.student.value,
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     is_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     failed_login_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
