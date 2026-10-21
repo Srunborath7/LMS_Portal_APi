@@ -1,15 +1,25 @@
 from typing import Annotated
+from uuid import UUID
 
 import jwt
-from fastapi import APIRouter, Cookie, Depends, Response, status
+from fastapi import APIRouter, Cookie, Depends, Query, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.exceptions import Unauthorized
+from app.core.exceptions import NotFound, Unauthorized
 from app.core.security import SecurityService
+from app.api.deps import require_admin
 from app.domain.auths.model import Auth
-from app.domain.auths.schema import AuthCreate, AuthLogin, AuthRead, AuthToken
+from app.domain.auths.schema import (
+    AuthCreate,
+    AuthFilter,
+    AuthLogin,
+    AuthOut,
+    AuthPage,
+    AuthRead,
+    AuthToken,
+)
 from app.repositories.auth_repositories import AuthRepository
 from app.services.auth_services import AuthService
 
@@ -94,4 +104,30 @@ async def get_current_auth(
 
 @router.get("/me", response_model=AuthRead)
 async def get_me(auth: Annotated[Auth, Depends(get_current_auth)]) -> Auth:
+    return auth
+
+
+@router.get("", response_model=AuthPage, dependencies=[Depends(require_admin)])
+async def list_auths(
+    filters: Annotated[AuthFilter, Query()], service: AuthServiceDep
+) -> AuthPage:
+    items, total = await service.list_auths(
+        q=filters.q,
+        is_active=filters.is_active,
+        page=filters.page,
+        size=filters.size,
+    )
+    return AuthPage(
+        items=[AuthOut.model_validate(auth) for auth in items],
+        total=total,
+        page=filters.page,
+        size=filters.size,
+    )
+
+
+@router.get("/{auth_id}", response_model=AuthOut, dependencies=[Depends(require_admin)])
+async def get_auth(auth_id: UUID, service: AuthServiceDep) -> Auth:
+    auth = await service.get_auth(auth_id)
+    if auth is None:
+        raise NotFound("Auth")
     return auth

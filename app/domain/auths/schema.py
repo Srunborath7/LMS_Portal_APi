@@ -52,3 +52,30 @@ class AuthToken(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: AuthRead
+
+class AuthOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    username: str
+    email: EmailStr
+    is_active: bool
+    is_verified: bool
+    failed_login_attempts: int
+    locked_until: datetime | None
+    last_login_at: datetime | None
+    created_at: datetime
+
+
+class AuthFilter(BaseModel):
+    q: str | None = None
+    is_active: bool | None = None
+    page: int = Field(default=1, ge=1)
+    size: int = Field(default=20, ge=1, le=100)
+
+
+class AuthPage(BaseModel):
+    items: list[AuthOut]
+    total: int
+    page: int
+    size: int
