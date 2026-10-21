@@ -48,7 +48,6 @@ class TeacherBase(BaseModel):
     date_of_birth: date | None = None
     gender: Gender | None = None
     nationality: str | None = Field(default=None, max_length=50)
-    photo_url: str | None = Field(default=None, max_length=500)
 
     # Contact
     email: EmailStr
@@ -113,7 +112,6 @@ class TeacherUpdate(BaseModel):
     date_of_birth: date | None = None
     gender: Gender | None = None
     nationality: str | None = Field(default=None, max_length=50)
-    photo_url: str | None = Field(default=None, max_length=500)
 
     email: EmailStr | None = None
     phone: str | None = None
@@ -173,7 +171,7 @@ class TeacherOut(BaseModel):
     date_of_birth: date | None
     gender: Gender | None
     nationality: str | None
-    photo_url: str | None
+    image_url: str | None
 
     email: EmailStr
     phone: str | None
@@ -211,7 +209,7 @@ class TeacherPublic(BaseModel):
     teacher_code: str
     full_name: str
     title: str | None
-    photo_url: str | None
+    image_url: str | None
     highest_degree: str | None
     specialization: str | None
     years_of_experience: int | None
@@ -227,6 +225,7 @@ class TeacherBrief(BaseModel):
     id: UUID
     teacher_code: str
     full_name: str
+    image_url: str | None = None
     status: TeacherStatus
 
 
