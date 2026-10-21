@@ -175,3 +175,9 @@ class CoursePage(BaseModel):
     total: int
     page: int
     size: int
+
+class CoursePublicPage(BaseModel):
+    items: list[CoursePublic]
+    total: int
+    page: int
+    size: int
