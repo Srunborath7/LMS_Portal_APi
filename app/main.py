@@ -9,20 +9,29 @@ from app.api.router import api_router
 from app.core.database import engine, get_db
 from app.core.exceptions import register_exception_handlers
 from app.core.upload import get_upload_dir
-
+from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
     await engine.dispose()
 
-
 app = FastAPI(title="LMS Portal API", lifespan=lifespan)
 register_exception_handlers(app)
 app.mount("/uploads", StaticFiles(directory=str(get_upload_dir()), check_dir=False), name="uploads")
 app.include_router(api_router, prefix="/api/v1")
 
-
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 @app.get("/")
 async def root() -> dict[str, str]:
     return {"message": "LMS Portal API is running"}
