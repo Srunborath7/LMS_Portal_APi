@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.auths.model import Auth, RefreshToken
@@ -65,3 +65,37 @@ class AuthRepository:
         if token.revoked_at is None:
             token.revoked_at = datetime.now(timezone.utc)
             await self.session.flush()
+
+    async def list(
+        self,
+        *,
+        q: str | None = None,
+        is_active: bool | None = None,
+        page: int = 1,
+        size: int = 20,
+    ) -> tuple[list[Auth], int]:
+        stmt = select(Auth)
+
+        if is_active is not None:
+            stmt = stmt.where(Auth.is_active == is_active)
+        if q:
+            escaped = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            pattern = f"%{escaped}%"
+            stmt = stmt.where(
+                or_(
+                    Auth.username.ilike(pattern, escape="\\"),
+                    Auth.email.ilike(pattern, escape="\\"),
+                )
+            )
+
+        total = await self.session.scalar(
+            select(func.count()).select_from(stmt.order_by(None).subquery())
+        )
+
+        stmt = (
+            stmt.order_by(Auth.created_at.desc(), Auth.id)  # id = stable paging
+            .offset((page - 1) * size)
+            .limit(size)
+        )
+        items = (await self.session.execute(stmt)).scalars().all()
+        return list(items), total or 0

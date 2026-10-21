@@ -95,5 +95,17 @@ class AuthService:
     async def get_auth(self, auth_id: UUID) -> model.Auth | None:
         return await self.repository.get_by_id(auth_id)
 
+    async def list_auths(
+        self,
+        *,
+        q: str | None = None,
+        is_active: bool | None = None,
+        page: int = 1,
+        size: int = 20,
+    ) -> tuple[list[model.Auth], int]:
+        return await self.repository.list(
+            q=q, is_active=is_active, page=page, size=size
+        )
+
     def decode_access_token(self, token: str) -> UUID:
         return self.security.decode_access_token(token)
