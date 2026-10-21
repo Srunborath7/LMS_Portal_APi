@@ -13,10 +13,11 @@ class AuthRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get_by_email(self, email: str) -> Auth | None:
-        result = await self.session.execute(
-            select(Auth).where(func.lower(Auth.email) == email.lower())
-        )
+    async def get_by_email(self, email: str, *, lock: bool = False) -> Auth | None:
+        statement = select(Auth).where(func.lower(Auth.email) == email.lower())
+        if lock:
+            statement = statement.with_for_update()
+        result = await self.session.execute(statement)
         return result.scalar_one_or_none()
 
     async def get_by_username(self, username: str) -> Auth | None:

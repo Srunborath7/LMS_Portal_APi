@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy.exc import IntegrityError
@@ -8,6 +8,9 @@ from app.core.security import SecurityService
 from app.domain.auths import model
 from app.domain.auths.schema import AuthCreate, AuthLogin
 from app.repositories.auth_repositories import AuthRepository
+
+MAX_FAILED_LOGIN_ATTEMPTS = 5
+LOGIN_LOCK_DURATION = timedelta(minutes=15)
 
 
 class AuthService:
@@ -39,19 +42,68 @@ class AuthService:
             ) from exc
 
     async def login(self, data: AuthLogin) -> tuple[model.Auth, str, str, int]:
+        login_failed = False
+        failure_message = "Invalid email or password"
         async with self.repository.session.begin():
-            auth = await self.repository.get_by_email(str(data.email).lower())
-            password_ok = await self.security.verify_password(data.password, auth.password_hash if auth else None)
-            if auth is None or not password_ok or not auth.is_active:
-                raise Unauthorized("Invalid email or password")
-            access_token = self.security.create_access_token(auth.id)
-            refresh_token, token_hash, expires_at = self.security.create_refresh_token()
-            await self.repository.create_refresh_token(
-                auth_id=auth.id,
-                token_hash=token_hash,
-                expires_at=expires_at,
+            auth = await self.repository.get_by_email(
+                str(data.email).lower(), lock=True
             )
-            await self.repository.update_last_login(auth)
+            now = datetime.now(timezone.utc)
+
+            if auth is None or not auth.is_active:
+                login_failed = True
+            else:
+                locked_until = auth.locked_until
+                if locked_until is not None and locked_until.tzinfo is None:
+                    locked_until = locked_until.replace(tzinfo=timezone.utc)
+
+                if locked_until is not None and locked_until > now:
+                    login_failed = True
+                    failure_message = (
+                        "Account temporarily locked. Try again after "
+                        f"{locked_until.isoformat()}"
+                    )
+                else:
+                    # Start a fresh attempt window after an expired lock.
+                    auth.failed_login_attempts = 0
+                    auth.locked_until = None
+                    password_ok = await self.security.verify_password(
+                        data.password, auth.password_hash
+                    )
+                    if not password_ok:
+                        auth.failed_login_attempts += 1
+                        if auth.failed_login_attempts >= MAX_FAILED_LOGIN_ATTEMPTS:
+                            auth.locked_until = now + LOGIN_LOCK_DURATION
+                            failure_message = (
+                                "Invalid email or password. Account locked for "
+                                f"{int(LOGIN_LOCK_DURATION.total_seconds() // 60)} minutes "
+                                "after too many failed attempts."
+                            )
+                        else:
+                            remaining = (
+                                MAX_FAILED_LOGIN_ATTEMPTS - auth.failed_login_attempts
+                            )
+                            failure_message = (
+                                "Invalid email or password. "
+                                f"You have {remaining} "
+                                f"attempt{'s' if remaining != 1 else ''} remaining."
+                            )
+                        login_failed = True
+                    else:
+                        auth.failed_login_attempts = 0
+                        auth.locked_until = None
+                        access_token = self.security.create_access_token(auth.id)
+                        refresh_token, token_hash, expires_at = self.security.create_refresh_token()
+                        await self.repository.create_refresh_token(
+                            auth_id=auth.id,
+                            token_hash=token_hash,
+                            expires_at=expires_at,
+                        )
+                        await self.repository.update_last_login(auth)
+
+        # Raise outside the transaction so failed-attempt updates are committed.
+        if login_failed:
+            raise Unauthorized(failure_message)
         max_age = max(0, int((expires_at - datetime.now(timezone.utc)).total_seconds()))
         return auth, access_token, refresh_token, max_age
 
