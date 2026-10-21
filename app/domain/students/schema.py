@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from datetime import date, datetime
 from typing import Annotated
 from uuid import UUID
@@ -14,21 +13,16 @@ from pydantic import (
     field_validator,
 )
 
+from app.core.phone import normalize_phone
 from app.domain.students.model import Gender, StudentStatus
-
-E164 = re.compile(r"^\+[1-9]\d{7,14}$")
 
 Name100 = Annotated[str, StringConstraints(min_length=1, max_length=100)]
 
-
-def _normalize_phone(v: str | None) -> str | None:
-    if v is None:
-        return None
-    v = re.sub(r"[\s\-().]", "", v)  # strip spaces, dashes, brackets
-    if not E164.match(v):
-        raise ValueError("Phone must be in international format, e.g. +85512345678")
-    return v
-
+class UserRef(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    # Auth records use `username`; expose it as `name` in nested audit refs.
+    name: str = Field(validation_alias="username")
 
 class StudentBase(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -56,7 +50,7 @@ class StudentBase(BaseModel):
     @field_validator("phone", "guardian_phone")
     @classmethod
     def check_phone(cls, v: str | None) -> str | None:
-        return _normalize_phone(v)
+        return normalize_phone(v)
 
     @field_validator("date_of_birth")
     @classmethod
@@ -102,7 +96,7 @@ class StudentUpdate(BaseModel):
     @field_validator("phone", "guardian_phone")
     @classmethod
     def check_phone(cls, v: str | None) -> str | None:
-        return _normalize_phone(v)
+        return normalize_phone(v)
 
     @field_validator("date_of_birth")
     @classmethod
@@ -140,9 +134,8 @@ class StudentOut(BaseModel):
 
     created_at: datetime
     updated_at: datetime
-    created_by_id: UUID | None
-    updated_by_id: UUID | None
-
+    created_by: UserRef | None
+    updated_by: UserRef | None
 
 class StudentBrief(BaseModel):
     """Lightweight version for dropdowns and nested use (e.g. enrollments)."""
