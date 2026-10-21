@@ -24,6 +24,7 @@ app.include_router(api_router, prefix="/api/v1")
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://lms-portal-website-xi.vercel.app",
 ]
 app.add_middleware(
     CORSMiddleware,
