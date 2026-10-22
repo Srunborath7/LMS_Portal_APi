@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
 from uuid import UUID
-
+from app.domain.auths.model import AuthRole
 from sqlalchemy import func, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.domain.auths.model import Auth, RefreshToken
+from sqlalchemy import update as sa_update
+from app.domain.auths.model import Auth, RefreshToken, PasswordResetToken
 
 
 class AuthRepository:
@@ -100,3 +100,45 @@ class AuthRepository:
         )
         items = (await self.session.execute(stmt)).scalars().all()
         return list(items), total or 0
+
+    async def update(self, auth: Auth, changes: dict) -> Auth:
+
+        for key, value in changes.items():
+            setattr(auth, key, value)
+        await self.session.flush()
+        await self.session.refresh(auth)
+
+        return auth
+
+    async def delete(self, auth: Auth) -> None:
+        await self.session.delete(auth)
+        await self.session.flush()
+
+    async def revoke_all_refresh_tokens(self, auth_id: UUID) -> None:
+        await self.session.execute(
+            sa_update(RefreshToken)
+            .where(RefreshToken.auth_id == auth_id, RefreshToken.revoked_at.is_(None))
+            .values(revoked_at=datetime.now(timezone.utc))
+        )
+
+    async def create_password_reset_token(self, auth_id: UUID, token_hash: str, expires_at: datetime) -> None:
+        await self.session.execute(
+            sa_update(PasswordResetToken)
+            .where(PasswordResetToken.auth_id == auth_id, PasswordResetToken.used_at.is_(None))
+            .values(used_at=datetime.now(timezone.utc))
+        )
+        self.session.add(PasswordResetToken(auth_id=auth_id, token_hash=token_hash, expires_at=expires_at))
+        await self.session.flush()
+
+    async def get_password_reset_token(self, token_hash: str, *, lock: bool = False) -> PasswordResetToken | None:
+        statement = select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
+        if lock:
+            statement = statement.with_for_update()
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def count_active_admins(self) -> int:
+        return await self.session.scalar(
+            select(func.count()).select_from(Auth).where(
+                Auth.role == AuthRole.admin, Auth.is_active.is_(True)
+            )
+        ) or 0
