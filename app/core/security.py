@@ -136,6 +136,12 @@ class SecurityService:
         return raw_token, token_hash, expires_at
 
     @staticmethod
+    def create_password_reset_token() -> tuple[str, str, datetime]:
+        raw_token = secrets.token_urlsafe(48)
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+        return raw_token, token_hash, datetime.now(timezone.utc) + timedelta(minutes=30)
+
+    @staticmethod
     def hash_refresh_token(raw_token: str) -> str:
         return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 

@@ -22,7 +22,8 @@ from app.domain.auths.schema import (
 )
 from app.repositories.auth_repositories import AuthRepository
 from app.services.auth_services import AuthService
-
+from app.domain.auths.schema import AuthUpdate
+from app.domain.auths.schema import PasswordResetConfirm, PasswordResetRequest
 
 router = APIRouter(prefix="/auths", tags=["auth"])
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -34,6 +35,17 @@ def get_auth_service(db: DbSession) -> AuthService:
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+@router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
+async def forgot_password(data: PasswordResetRequest, service: AuthServiceDep) -> dict[str, str]:
+    await service.request_password_reset(str(data.email))
+    return {"message": "If an active account exists for this email, a reset link will be sent."}
+
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_password(data: PasswordResetConfirm, service: AuthServiceDep) -> None:
+    await service.reset_password(data.token, data.new_password)
 
 
 @router.post("/register", response_model=AuthRead, status_code=status.HTTP_201_CREATED)
@@ -131,3 +143,20 @@ async def get_auth(auth_id: UUID, service: AuthServiceDep) -> Auth:
     if auth is None:
         raise NotFound("Auth")
     return auth
+
+@router.patch("/{auth_id}", response_model=AuthOut)
+async def update_auth(
+    auth_id: UUID,
+    data: AuthUpdate,
+    current_user_id: Annotated[UUID, Depends(require_admin)],
+    service: AuthServiceDep,
+):
+    return await service.update_auth(auth_id, data, current_user_id)
+
+@router.delete("/{auth_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_auth(
+    auth_id: UUID,
+    current_user_id: Annotated[UUID, Depends(require_admin)],
+    service: AuthServiceDep,
+) -> None:
+    await service.delete_auth(auth_id, current_user_id)
