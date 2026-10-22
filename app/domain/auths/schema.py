@@ -79,3 +79,45 @@ class AuthPage(BaseModel):
     total: int
     page: int
     size: int
+
+class AuthUpdate(BaseModel):
+    """Admin PATCH: every field optional. Use data.model_dump(exclude_unset=True)."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    username: str | None = Field(default=None, min_length=3, max_length=50)
+    email: EmailStr | None = None
+    role: AuthRole | None = None
+    is_active: bool | None = None
+    is_verified: bool | None = None
+
+    @field_validator("username")
+    @classmethod
+    def trim_username(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        if len(value) < 3:
+            raise ValueError("Username must contain at least 3 non-space characters")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def lower_email(cls, v: str | None) -> str | None:
+        return v.lower() if v else v
+
+
+class AuthPasswordChange(BaseModel):
+    """For the logged-in user changing their own password."""
+
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+    new_password: str = Field(min_length=8, max_length=128)
