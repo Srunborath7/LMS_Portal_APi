@@ -4,9 +4,12 @@ import logging
 import os
 import smtplib
 import json
+import ssl
 import urllib.error
 import urllib.request
 from email.message import EmailMessage
+
+import certifi
 
 from app.core.exceptions import ServiceUnavailable
 
@@ -72,7 +75,8 @@ def _send_resend_sync(recipient: str, reset_url: str, api_key: str) -> None:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:
+        tls_context = ssl.create_default_context(cafile=certifi.where())
+        with urllib.request.urlopen(request, timeout=20, context=tls_context) as response:
             if response.status >= 300:
                 raise ServiceUnavailable("Email provider rejected the reset email")
     except urllib.error.HTTPError as exc:
