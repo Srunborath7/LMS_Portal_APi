@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from fastapi import UploadFile
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequest, Conflict, NotFound
+from app.core.upload import remove_image, save_image
 from app.domain.courses.model import Course, CourseStatus
 from app.repositories.course_repositories import CourseRepository
 from app.domain.courses.schema import CourseCreate, CourseFilter, CourseUpdate
@@ -63,6 +65,45 @@ class CourseService:
         except IntegrityError:
             await self.session.rollback()
             raise Conflict("A course with this name already exists")
+        return course
+
+    async def create_with_image(
+        self, data: CourseCreate, upload: UploadFile | None = None
+    ) -> Course:
+        new_url: str | None = None
+        if upload is not None and getattr(upload, "filename", None):
+            new_url = await save_image(upload, "courses")
+            data = data.model_copy(update={"thumbnail_url": new_url})
+        try:
+            return await self.create(data)
+        except Exception:
+            if new_url:
+                await remove_image(new_url)
+            raise
+
+    async def set_image(self, course_id: UUID, upload: UploadFile) -> Course:
+        course = await self.get(course_id)
+        new_url = await save_image(upload, "courses")
+        old_url = course.thumbnail_url
+        try:
+            await self.repo.update(course, {"thumbnail_url": new_url})
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            await remove_image(new_url)
+            raise
+        if old_url and old_url != new_url:
+            await remove_image(old_url)
+        return course
+
+    async def delete_image(self, course_id: UUID) -> Course:
+        course = await self.get(course_id)
+        old_url = course.thumbnail_url
+        if old_url is None:
+            return course
+        await self.repo.update(course, {"thumbnail_url": None})
+        await self.session.commit()
+        await remove_image(old_url)
         return course
 
     async def update(self, course_id: UUID, data: CourseUpdate) -> Course:

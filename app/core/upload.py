@@ -99,9 +99,12 @@ def _image_format(content: bytes) -> tuple[bytes, str, str] | None:
     return None
 
 
+ALLOWED_IMAGE_FOLDERS = {"students", "teachers", "courses"}
+
+
 async def save_image(upload: UploadFile, folder: str) -> str:
     """Validate and store an image, returning its public URL."""
-    if folder not in {"students", "teachers"}:
+    if folder not in ALLOWED_IMAGE_FOLDERS:
         raise ValueError("Unsupported image folder.")
     content = await upload.read(MAX_IMAGE_SIZE + 1)
     if not content:
@@ -157,14 +160,14 @@ async def remove_image(image_url: str | None) -> None:
             if parsed.scheme != "https" or parsed.hostname != expected_host or not parsed.path.startswith(bucket_prefix):
                 return
             key = unquote(parsed.path[len(bucket_prefix):])
-            if not key.startswith(("students/", "teachers/")):
+            if not any(key.startswith(f"{f}/") for f in ALLOWED_IMAGE_FOLDERS):
                 return
             _, _, _, _, bucket = _s3_settings()
             await asyncio.to_thread(_get_s3_client().delete_object, Bucket=bucket, Key=key)
             return
 
         parts = Path(parsed.path).parts
-        if len(parts) != 4 or parts[1] != "uploads" or parts[2] not in {"students", "teachers"}:
+        if len(parts) != 4 or parts[1] != "uploads" or parts[2] not in ALLOWED_IMAGE_FOLDERS:
             return
         filename = parts[3]
         if Path(filename).name != filename:
