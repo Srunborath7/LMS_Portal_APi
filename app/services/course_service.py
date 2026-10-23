@@ -70,8 +70,13 @@ class CourseService:
     async def create_with_image(
         self, data: CourseCreate, upload: UploadFile | None = None
     ) -> Course:
+        has_file = (
+            upload is not None
+            and bool(getattr(upload, "filename", None))
+            and bool(upload.filename.strip())
+        )
         new_url: str | None = None
-        if upload is not None and getattr(upload, "filename", None):
+        if has_file:
             new_url = await save_image(upload, "courses")
             data = data.model_copy(update={"thumbnail_url": new_url})
         try:
@@ -80,6 +85,32 @@ class CourseService:
             if new_url:
                 await remove_image(new_url)
             raise
+
+    async def update_with_image(
+        self, course_id: UUID, data: CourseUpdate, upload: UploadFile | None = None
+    ) -> Course:
+        has_file = (
+            upload is not None
+            and bool(getattr(upload, "filename", None))
+            and bool(upload.filename.strip())
+        )
+        if has_file:
+            course = await self.get(course_id)
+            if course.status == CourseStatus.archived:
+                raise BadRequest("Archived courses cannot be edited. Publish it again first.")
+            new_url = await save_image(upload, "courses")
+            old_url = course.thumbnail_url
+            data = data.model_copy(update={"thumbnail_url": new_url})
+            try:
+                updated = await self.update(course_id, data)
+                if old_url and old_url != new_url:
+                    await remove_image(old_url)
+                return updated
+            except Exception:
+                if new_url:
+                    await remove_image(new_url)
+                raise
+        return await self.update(course_id, data)
 
     async def set_image(self, course_id: UUID, upload: UploadFile) -> Course:
         course = await self.get(course_id)

@@ -4,11 +4,12 @@ from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user_id, require_staff
 from app.core.database import get_db
+from app.core.exceptions import BadRequest
 from app.domain.courses.model import CourseLevel
 from app.domain.courses.schema import (
     CourseBrief,
@@ -54,11 +55,7 @@ async def course_options(svc: Service):
     return await svc.list_published()
 
 @router.post("", response_model=CourseOut, status_code=status.HTTP_201_CREATED, dependencies=[Staff])
-async def create_course(data: CourseCreate, svc: Service):
-    return await svc.create(data)
-
-@router.post("/form", response_model=CourseOut, status_code=status.HTTP_201_CREATED, dependencies=[Staff])
-async def create_course_with_form(
+async def create_course(
     svc: Service,
     name: str = Form(...),
     description: str | None = Form(None),
@@ -74,9 +71,17 @@ async def create_course_with_form(
 ):
     parsed_duration: Decimal | None = None
     if duration_hours and duration_hours.strip():
-        parsed_duration = Decimal(duration_hours.strip())
+        try:
+            parsed_duration = Decimal(duration_hours.strip())
+        except Exception:
+            raise BadRequest("duration_hours must be a valid number")
 
-    parsed_fee = Decimal(fee.strip()) if fee and fee.strip() else Decimal("0")
+    parsed_fee = Decimal("0")
+    if fee and fee.strip():
+        try:
+            parsed_fee = Decimal(fee.strip())
+        except Exception:
+            raise BadRequest("fee must be a valid number")
 
     clean_description = description.strip() if description and description.strip() else None
     clean_objectives = objectives.strip() if objectives and objectives.strip() else None
@@ -110,8 +115,80 @@ async def get_course(course_id: UUID, svc: Service):
     return await svc.get(course_id)
 
 @router.patch("/{course_id}", response_model=CourseOut, dependencies=[Staff])
-async def update_course(course_id: UUID, data: CourseUpdate, svc: Service):
-    return await svc.update(course_id, data)
+async def update_course(
+    course_id: UUID,
+    svc: Service,
+    request: Request,
+    name: str | None = Form(None),
+    description: str | None = Form(None),
+    objectives: str | None = Form(None),
+    category: str | None = Form(None),
+    level: CourseLevel | None = Form(None),
+    language: str | None = Form(None),
+    duration_hours: str | None = Form(None),
+    fee: str | None = Form(None),
+    currency: str | None = Form(None),
+    thumbnail_url: str | None = Form(None),
+    image: UploadFile | None = File(None),
+):
+    form_data = await request.form()
+    updates: dict = {}
+
+    if "name" in form_data:
+        clean_name = name.strip() if name and name.strip() else None
+        if clean_name is None:
+            raise BadRequest("name cannot be null or empty")
+        updates["name"] = clean_name
+
+    if "description" in form_data:
+        updates["description"] = description.strip() if description and description.strip() else None
+
+    if "objectives" in form_data:
+        updates["objectives"] = objectives.strip() if objectives and objectives.strip() else None
+
+    if "category" in form_data:
+        updates["category"] = category.strip() if category and category.strip() else None
+
+    if "level" in form_data:
+        if level is None:
+            raise BadRequest("level cannot be null")
+        updates["level"] = level
+
+    if "language" in form_data:
+        clean_lang = language.strip() if language and language.strip() else None
+        if clean_lang is None:
+            raise BadRequest("language cannot be null or empty")
+        updates["language"] = clean_lang
+
+    if "duration_hours" in form_data:
+        if duration_hours is not None and duration_hours.strip():
+            try:
+                updates["duration_hours"] = Decimal(duration_hours.strip())
+            except Exception:
+                raise BadRequest("duration_hours must be a valid number")
+        else:
+            updates["duration_hours"] = None
+
+    if "fee" in form_data:
+        if fee is not None and fee.strip():
+            try:
+                updates["fee"] = Decimal(fee.strip())
+            except Exception:
+                raise BadRequest("fee must be a valid number")
+        else:
+            raise BadRequest("fee cannot be null")
+
+    if "currency" in form_data:
+        clean_curr = currency.strip() if currency and currency.strip() else None
+        if clean_curr is None:
+            raise BadRequest("currency cannot be null or empty")
+        updates["currency"] = clean_curr
+
+    if "thumbnail_url" in form_data:
+        updates["thumbnail_url"] = thumbnail_url.strip() if thumbnail_url and thumbnail_url.strip() else None
+
+    course_data = CourseUpdate(**updates)
+    return await svc.update_with_image(course_id, course_data, image)
 
 @router.put("/{course_id}/image", response_model=CourseOut, dependencies=[Staff])
 async def upload_course_image(
