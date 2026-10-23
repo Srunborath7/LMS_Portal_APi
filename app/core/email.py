@@ -19,7 +19,13 @@ logger = logging.getLogger(__name__)
 def _send_resend_sync(recipient: str, reset_url: str, api_key: str) -> None:
     sender = os.getenv("EMAIL_FROM", "").strip()
     if not sender:
-        raise ServiceUnavailable("EMAIL_FROM must be configured when using Resend")
+        sender = "onboarding@resend.dev"
+    elif sender.endswith("@gmail.com"):
+        logger.warning(
+            "Resend does not permit '@gmail.com' in EMAIL_FROM without custom domain verification. "
+            "Falling back to 'onboarding@resend.dev' for test delivery."
+        )
+        sender = "onboarding@resend.dev"
 
     safe_reset_url = html.escape(reset_url, quote=True)
     plain_text = (
@@ -71,6 +77,7 @@ def _send_resend_sync(recipient: str, reset_url: str, api_key: str) -> None:
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "User-Agent": "LMS-Portal/1.0",
         },
         method="POST",
     )
@@ -80,8 +87,22 @@ def _send_resend_sync(recipient: str, reset_url: str, api_key: str) -> None:
             if response.status >= 300:
                 raise ServiceUnavailable("Email provider rejected the reset email")
     except urllib.error.HTTPError as exc:
-        logger.error("Resend rejected password reset email (HTTP %s)", exc.code)
-        raise ServiceUnavailable("Could not send password reset email") from exc
+        try:
+            error_payload = json.loads(exc.read().decode("utf-8"))
+            reason = str(error_payload.get("message", ""))[:500]
+            error_name = str(error_payload.get("name", ""))[:100]
+        except (ValueError, UnicodeDecodeError, AttributeError):
+            reason = ""
+            error_name = ""
+        logger.error(
+            "Resend rejected password reset email (HTTP %s, %s): %s",
+            exc.code,
+            error_name or "provider error",
+            reason or "no error detail returned",
+        )
+        raise ServiceUnavailable(
+            f"Could not send password reset email: {reason or 'email provider error'}"
+        ) from exc
     except (OSError, urllib.error.URLError) as exc:
         logger.exception("Resend password reset delivery failed")
         raise ServiceUnavailable("Could not send password reset email") from exc
@@ -149,6 +170,19 @@ def _send_gmail_sync(recipient: str, reset_url: str) -> None:
 async def send_password_reset_email(recipient: str, reset_url: str) -> None:
     resend_api_key = os.getenv("RESEND_API_KEY", "").strip()
     if resend_api_key:
-        await asyncio.to_thread(_send_resend_sync, recipient, reset_url, resend_api_key)
+        try:
+            await asyncio.to_thread(_send_resend_sync, recipient, reset_url, resend_api_key)
+            return
+        except Exception as exc:
+            gmail_sender = os.getenv("GMAIL_ADDRESS", "").strip()
+            gmail_pwd = os.getenv("GMAIL_APP_PASSWORD", "").strip()
+            if gmail_sender and gmail_pwd:
+                logger.warning("Resend delivery failed; attempting Gmail SMTP fallback: %s", exc)
+                try:
+                    await asyncio.to_thread(_send_gmail_sync, recipient, reset_url)
+                    return
+                except Exception as smtp_exc:
+                    logger.error("Gmail SMTP fallback also failed: %s", smtp_exc)
+            raise
     else:
         await asyncio.to_thread(_send_gmail_sync, recipient, reset_url)
